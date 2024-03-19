@@ -14,6 +14,7 @@ class Robot:
         self.aStar = aStar
         self.is_avoid = False
         self.get_goods = False
+        self.berth_index = None
 
     def choose_goods(self, goods_list):
         self.aStar.s_start = (self.x, self.y)
@@ -42,6 +43,22 @@ class Robot:
                         cant_get.append(goods_list[optim[1]])
         return cant_get
 
+    def choose_berth(self,berth_list,berth_index):
+        self.aStar.s_start = (self.x, self.y)
+        value_estimate = []
+        for i in berth_index:
+            h = abs(berth_list[i].x - self.x) + abs(berth_list[i].y - self.y) + 1
+            heapq.heappush(value_estimate, (h, i, berth_list[i].x, berth_list[i].y))
+        if len(value_estimate) > 0:
+            path = []
+            while len(path) == 0 and len(value_estimate) > 0:
+                optim = heapq.heappop(value_estimate)
+                self.aStar.s_goal = (optim[-2], optim[-1])
+                path = self.aStar.searching()
+                if len(path) > 0:
+                    path.reverse()
+                    self.berth_index, self.path = optim[1], path
+
 
 class Berth:
     def __init__(self, x=0, y=0, transport_time=0, loading_speed=0):
@@ -51,6 +68,7 @@ class Berth:
         self.loading_speed = loading_speed
         self.inventory = 0
         self.ship = -1
+
 
 
 class Boat:
@@ -75,7 +93,7 @@ class Goods:
     def choose_berth(self, berth_list, volecity):
         self.aStar.s_start = (self.x, self.y)
         distance_estimate = []
-        for berth,i in berth_list:
+        for i,berth in enumerate(berth_list) :
             value = (abs(berth.x - self.x) + abs(berth.y - self.y))
             heapq.heappush(distance_estimate, (value, i, berth.x, berth.y))
         optim = heapq.heappop(distance_estimate)
