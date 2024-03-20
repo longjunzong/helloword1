@@ -35,7 +35,10 @@ berth_num = 10
 berth = [Berth() for _ in range(berth_num)]
 berth_pos = [(0, 0) for _ in range(berth_num)]
 prior_berth = []  # 可以使用的码头的在berth里的下标
+remote_birth = []
+last_berth = []
 MAX_TRANSPORT_TIME = 0
+MIN_TRANSPORT_TIME = 0
 
 # 船相关
 boat = [Boat() for _ in range(5)]
@@ -43,7 +46,8 @@ boat_capacity = 0
 
 money = 0
 id = 0
-the_last=True
+the_last = True
+get_gds = 0
 
 
 def get_berth_without_boat(flag):
@@ -64,29 +68,34 @@ def get_berth_without_boat(flag):
 def set_optiom_berth():
     global berth
     global prior_berth
+    global remote_birth
     global MAX_TRANSPORT_TIME
+    global MIN_TRANSPORT_TIME
     e = []
     for k, i in enumerate(berth):
         heapq.heappush(e, (i.transport_time, k))
-        if i.transport_time > MAX_TRANSPORT_TIME:
-            MAX_TRANSPORT_TIME = i.transport_time
-    for j in range(5):
-        prior_berth.append(heapq.heappop(e)[1])
+    for j in range(10):
+        if j < 5:
+            prior_berth.append(heapq.heappop(e)[1])
+        else:
+            remote_birth.append(heapq.heappop(e)[1])
+    remote_birth.reverse()
+    MAX_TRANSPORT_TIME = berth[remote_birth[0]].transport_time
+    MIN_TRANSPORT_TIME = berth[prior_berth[0]].transport_time
 
 
-def get_optim_berth():
+def get_optim_berth(zhenshu):
     global berth
-    most = 0  # 最优的码头在berth中的下标
-    m = berth[0].inventory - (
-                boat_capacity - (boat[berth[0].ship].num if berth[0].ship != -1 else 0))  # 码头上的货物减停在码头上的船的容量
+    global remote_birth
+    global boat
+    most = 0  # 存货量最多的码头在berth中的下标
+    m = -1
     for i in range(10):
-        n = berth[i].inventory - (boat_capacity - (boat[berth[i].ship].num if berth[i].ship != -1 else 0))
-        if berth[i].inventory >= boat_capacity and berth[i].ship == -1:
-            most = i
-            break
-        elif n > m:
-            most = i
-            m = n
+        if berth[i].inventory > m and berth[i].ship == -1 and zhenshu+2*berth[i].transport_time<=14999:
+            idx = remote_birth[prior_berth.index(i)] if i in prior_berth else prior_berth[remote_birth.index(i)]
+            if berth[idx].ship==-1 or boat[berth[idx].ship].flag:
+                m = berth[i].inventory
+                most = i
     return most
 
 
@@ -95,88 +104,62 @@ def boat_transport(zhenshu):
     global berth
     global MAX_TRANSPORT_TIME
     global prior_berth
+    global remote_birth
     for i in range(5):
-        if zhenshu + 3 * MAX_TRANSPORT_TIME > 14999:
-            if boat[i].status == 1 and boat[i].pos != -1:
-                p = boat[i].pos
-                l0 = berth[p].loading_speed if berth[p].inventory > berth[p].loading_speed else berth[p].inventory
-                boat[i].num = boat[i].num + l0
-                berth[p].inventory = berth[boat[i].pos].inventory - l0
-                if zhenshu + MAX_TRANSPORT_TIME >= 14999:
-                    instruction_list.append("go " + str(i))
-                elif berth[p].inventory == 0 and zhenshu + 2 * MAX_TRANSPORT_TIME <= 14499:
-                    if boat[i].instruction is None:
-                        m = get_berth_without_boat(False)
-                        if m != -1:
-                            instruction_list.append("ship " + str(i) + " " + str(m))
-                            boat[i].instruction = ("ship", m)
-                            berth[m].ship = i
-                            berth[p].ship = -1
-                        else:
+        if boat[i].status == 1 and boat[i].pos != -1:
+            p = boat[i].pos
+            l0 = berth[p].loading_speed if berth[p].inventory > berth[p].loading_speed else berth[p].inventory
+            boat[i].num += l0
+            berth[p].inventory -= l0
+            if zhenshu + berth[p].transport_time > 14947:
+                instruction_list.append("go " + str(i))
+            elif berth[p].inventory == 0:
+                if boat[i].flag:
+                    if zhenshu+ berth[p].transport_time + 2 * berth[prior_berth[remote_birth.index(p)] if p in remote_birth else remote_birth[
+                    prior_berth.index(p)]].transport_time<=14997:
+                        if boat[i].instruction is None:
                             instruction_list.append("go " + str(i))
+                            berth[p].ship = -1
                             boat[i].instruction = "go"
-                    else:
-                        if boat[i].instruction[0] == "ship":
-                            instruction_list.append("ship " + str(i) + " " + str(boat[i].instruction[1]))
-                            berth[p].ship = -1
                         else:
                             instruction_list.append("go " + str(i))
-            elif boat[i].status == 1 and boat[i].pos == -1:
-                if zhenshu + 2 * MAX_TRANSPORT_TIME <= 14499:
-                    if boat[i].instruction is None:
-                        for j in range(10):
-                            if berth[j].ship == -1 and j not in prior_berth:
-                                instruction_list.append("ship " + str(i) + " " + str(j))
-                                boat[i].instruction = ("ship", j)
-                                berth[j].ship = i
-                    else:
-                        instruction_list.append("ship " + str(i) + " " + str(boat[i].instruction[1]))
-                elif zhenshu + MAX_TRANSPORT_TIME <= 14499:
-                    if boat[i].instruction is None:
-                        for j in prior_berth:
-                            if berth[j].ship == -1:
-                                instruction_list.append("ship " + str(i) + " " + str(j))
-                                boat[i].instruction = ("ship", j)
-                                berth[j].ship = i
-                    else:
-                        instruction_list.append("ship " + str(i) + " " + str(boat[i].instruction[1]))
-            elif boat[i].status == 0:
-                boat[i].instruction = None
-                if boat[i].pos == -1:
-                    boat[i].num = 0
-        else:
-            if boat[i].status == 1 and boat[i].pos != -1:
-                p = boat[i].pos
-                l0 = berth[p].loading_speed if berth[p].inventory > berth[p].loading_speed else berth[p].inventory
-                boat[i].num = boat[i].num + l0
-                berth[p].inventory = berth[boat[i].pos].inventory - l0
-                if berth[p].inventory == 0 and boat_capacity - boat[i].num > 20:
-                    if boat[i].instruction is None:
-                        m = get_berth_without_boat(True)
-                        if m != -1:
-                            instruction_list.append("ship " + str(i) + " " + str(m))
+                else:
+                    if zhenshu+berth[prior_berth[remote_birth.index(p)] if p in remote_birth else remote_birth[
+                    prior_berth.index(p)]].transport_time<14450:
+                        if boat[i].instruction is None:
+                            m = None
+                            if p in prior_berth:
+                                m = remote_birth[prior_berth.index(p)]
+                                instruction_list.append("ship " + str(i) + " " + str(m))
+                            else:
+                                m = prior_berth[remote_birth.index(p)]
+                                instruction_list.append("ship " + str(i) + " " + str(m))
                             boat[i].instruction = ("ship", m)
+                            boat[i].flag = True
                             berth[m].ship = i
                             berth[p].ship = -1
-                    else:
-                        instruction_list.append("ship " + str(i) + " " + str(boat[i].instruction[1]))
-                elif boat[i].num > boat_capacity:
-                    instruction_list.append("go " + str(i))
-                    if boat[i].instruction is None:
-                        berth[p].ship = -1
-                        boat[i].instruction = "go"
-            elif boat[i].status == 1 and boat[i].pos == -1:
+                        else:
+                            instruction_list.append("ship " + str(i) + " " + str(boat[i].instruction[1]))
+            elif boat[i].num >= boat_capacity:
                 if boat[i].instruction is None:
-                    m = get_optim_berth()
+                    instruction_list.append("go " + str(i))
+                    berth[p].ship = -1
+                    boat[i].instruction = "go"
+                else:
+                    instruction_list.append("go " + str(i))
+        elif boat[i].status == 1 and boat[i].pos == -1:
+            if boat[i].instruction is None:
+                boat[i].num = 0
+                boat[i].flag = False
+                m = get_optim_berth(zhenshu)
+                if m!=-1:
                     instruction_list.append("ship " + str(i) + " " + str(m))
                     berth[m].ship = i
                     boat[i].instruction = ("ship", m)
-                else:
-                    instruction_list.append("ship " + str(i) + " " + str(berth[boat[i].instruction[1]]))
-            elif boat[i].status == 0:
-                boat[i].instruction = None
-                if boat[i].pos == -1:
-                    boat[i].num = 0
+            else:
+                instruction_list.append("ship " + str(i) + " " + str(berth[boat[i].instruction[1]]))
+        elif boat[i].status == 0:
+            boat[i].instruction = None
 
 
 def substract_gds_id(g_id):
@@ -278,7 +261,6 @@ def avoid(robot_id):
                         instruction_list.append(
                             "move " + str(robot_id) + " " + str(one_step(one_robot.x, one_robot.y, *i)))
                         one_robot.x, one_robot.y = i
-                        one_robot.is_avoid = True
                         robot_pos[robot_id] = i
                         if i not in one_robot.path:
                             one_robot.path.insert(now_idx, i)
@@ -294,7 +276,6 @@ def avoid(robot_id):
                 one_robot.x, one_robot.y = last_choice
                 one_robot.mbx, one_robot.mby = x, y
                 robot_pos[robot_id] = last_choice
-        one_robot.is_avoid = True
     else:
         success_move(one_robot, robot_id, newx, newy, False)
 
@@ -310,7 +291,6 @@ def success_move(one_robot, robot_id, newx, newy, to_success):
     robot_pos[robot_id] = (newx, newy)
     one_robot.x, one_robot.y = newx, newy
     destx, desty = one_robot.path[-1]
-    one_robot.is_avoid = False
     if one_robot.goods == 1:
         if destx <= newx <= destx + 3 and desty <= newy <= desty + 3:
             instruction_list.append("pull " + str(robot_id))
@@ -323,7 +303,9 @@ def try_to_move(robot_id, zhen):
     global robot
     global berth
     global prior_berth
+    global get_gds
     global the_last
+    global last_berth
     one_robot = robot[robot_id]
     x, y = one_robot.x, one_robot.y
     destx, desty = one_robot.path[-1] if len(one_robot.path) > 0 else (-1, -1)
@@ -346,9 +328,10 @@ def try_to_move(robot_id, zhen):
         if (destx, desty) == (x, y) and (destx, desty) not in berth_pos and gds[x][y] != 0:  # get成功，修改路径至港口，把货物移除
             g_id = one_robot.goods_idx
             one_robot.choose_berth(berth,
-                                   [h for h in range(10)] if the_last else prior_berth)
+                                   [h for h in range(10)] if the_last else last_berth)
             my_gds.pop(g_id)
             substract_gds_id(g_id)
+            get_gds += gds[x][y]
             gds[x][y] = 0
         elif destx <= x <= destx + 3 and desty <= y <= desty + 3 and (destx, desty) in berth_pos:  # pull失败，重新pull
             instruction_list.append("pull " + str(robot_id))
@@ -408,13 +391,15 @@ def main():
     global robot
     global berth
     global MAX_TRANSPORT_TIME
+    global MIN_TRANSPORT_TIME
     global prior_berth
     global the_last
+    global get_gds
+    global last_berth
     Init()
     for zhen in range(1, 15001):
         id = Input()
-        if zhen > 500:
-            boat_transport(id)
+        boat_transport(id)
         # with open("robot_pos.txt", "a") as f:
         #    e = []
         #    for i in robot:
@@ -429,16 +414,23 @@ def main():
         #    f.writelines(str(zhen) + "--" + str(e) + "\n")
         # with open("my_order.txt", "a") as f:
         #    f.writelines(str(zhen) + "--" + str(my_robot_order) + "\n")
-        # with open("berth.txt", "a") as f:
-        #    e = []
-        #    for i in prior_berth:
-        #        e.append((i, berth[i].inventory, berth[i].ship))
-        #    f.writelines(str(zhen) + "--" + str(e) + "\n")
-        if id + 3 * MAX_TRANSPORT_TIME > 14999 and the_last:
-            the_last=False
+        with open("berth.txt", "a") as f:
+            e = []
+            for i in range(10):
+                e.append((i, berth[i].inventory, berth[i].ship, berth[i].loading_speed, berth[i].transport_time))
+            f.writelines(str(id) + "--" + str(e) + "\n")
+        with open("goods.txt", "a") as f:
+            f.writelines(str(id) + "--" + str(get_gds) + "\n")
+        e = []
+        if id + MIN_TRANSPORT_TIME > 14497 and the_last:
+            the_last = False
+            for j in range(10):
+                if berth[j].ship != -1:
+                    e.append(j)
             for i in robot:
                 if i.goods == 1:
-                    i.choose_berth(berth, prior_berth)
+                    i.choose_berth(berth, e)
+            last_berth = e
         for i in my_robot_order:
             try_to_move(i, id)
         if len(success) < len(my_robot_order):

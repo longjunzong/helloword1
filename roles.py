@@ -12,9 +12,9 @@ class Robot:
         self.path = []
         self.goods_idx = -999
         self.aStar = aStar
-        self.is_avoid = False
-        self.get_goods = False
         self.berth_index = None
+        self.my_gds=[]
+        self.my_berth=[]
 
     def choose_goods(self, goods_list):
         self.aStar.s_start = (self.x, self.y)
@@ -77,6 +77,7 @@ class Boat:
         self.pos = pos
         self.status = status
         self.instruction = None
+        self.flag = False#判断船有没有走
 
 
 class Goods:
